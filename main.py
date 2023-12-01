@@ -1,5 +1,5 @@
 from telegram import Update
-from telegram.ext import Application, CommandHandler, CallbackContext
+from telegram.ext import Application, CommandHandler, CallbackContext, filters, MessageHandler
 
 # Replace 'YOUR_TOKEN' with your actual bot token
 YOUR_TOKEN = 'YOUR APP TOKEN' # Your App Token
@@ -7,6 +7,11 @@ YOUR_TOKEN = 'YOUR APP TOKEN' # Your App Token
 groups = ["GROUPS IDS"] # Your groups id
 
 authorized_admins = ["USER IDS"] # Authorized Users ID for admins of the group
+
+banned_words = ["spam", "Coco"]
+
+warned_users = {}
+
 
 async def get_admins(chat_id, context):
     administrators = await context.bot.get_chat_administrators(chat_id)
@@ -63,8 +68,24 @@ async def broadcast(update: Update, context: CallbackContext) -> None:
 async def spam_control(update: Update, context: CallbackContext) -> None:
     chat_id = update.message.chat_id
     if chat_id in groups:
-        await context.bot.delete_message(chat_id=chat_id, message_id=update.message.message_id)
-        await update.message.reply_text('Please refrain from spamming.')
+        for word in banned_words:
+            if word in update.message.text.lower():
+                # Supprimer le message du spammeur
+                await context.bot.delete_message(chat_id=chat_id, message_id=update.message.message_id)
+
+                warn(update, context) # warn the people
+
+                # Avertir l'utilisateur du spam
+                await update.message.reply_text('Please refrain from spamming. You have been Warned.')
+
+def warn(update: Update, context: CallbackContext) -> None:
+    user_id = update.message.from_user.id
+
+    if warned_users.get(user_id) is not None:
+        warned_users[user_id] = warned_users[user_id] +1
+    else:
+        warned_users[user_id] = 1
+
 
 def main() -> None:
     application = Application.builder().token(YOUR_TOKEN).build()
@@ -73,7 +94,9 @@ def main() -> None:
     application.add_handler(CommandHandler('ban', ban))
     application.add_handler(CommandHandler('unban', unban))
     application.add_handler(CommandHandler('broadcast', broadcast))
-    application.add_handler(CommandHandler("spam", spam_control))
+
+    message_handler = MessageHandler(filters.TEXT, spam_control)
+    application.add_handler(message_handler)
 
     application.run_polling()
     application.idle()
